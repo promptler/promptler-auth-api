@@ -3,7 +3,7 @@ Apple Sign-In authentication endpoints
 """
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
@@ -120,7 +120,7 @@ async def apple_sign_in(
         if sign_in_data.device_profile:
             existing_user.latest_device_profile = _device_profile_to_dict(sign_in_data.device_profile)
 
-        existing_user.last_updated_at = datetime.utcnow()
+        existing_user.last_updated_at = datetime.now(timezone.utc)
         user = existing_user
 
     else:
@@ -133,8 +133,8 @@ async def apple_sign_in(
             display_name=sign_in_data.display_name,
             email=sign_in_data.email,
             latest_device_profile=_device_profile_to_dict(sign_in_data.device_profile),
-            first_seen_at=datetime.utcnow(),
-            last_updated_at=datetime.utcnow()
+            first_seen_at=datetime.now(timezone.utc),
+            last_updated_at=datetime.now(timezone.utc)
         )
         db.add(user)
 
@@ -155,7 +155,7 @@ async def apple_sign_in(
             app_build=device_data.app_build,
             raw_profile=_device_profile_to_dict(device_data),
             captured_at=sign_in_data.timestamp,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
         db.add(snapshot)
         logger.info(f"Created device snapshot for user: {sign_in_data.apple_user_id}")
@@ -223,7 +223,7 @@ async def update_device_metadata(
 
     # Update device profile
     user.latest_device_profile = _device_profile_to_dict(update_data.device_profile)
-    user.last_updated_at = datetime.utcnow()
+    user.last_updated_at = datetime.now(timezone.utc)
 
     # Create device snapshot
     device_data = update_data.device_profile
@@ -241,7 +241,7 @@ async def update_device_metadata(
         app_build=device_data.app_build,
         raw_profile=_device_profile_to_dict(device_data),
         captured_at=update_data.timestamp,
-        created_at=datetime.utcnow()
+        created_at=datetime.now(timezone.utc)
     )
     db.add(snapshot)
 
@@ -277,5 +277,5 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "promptler-auth",
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
