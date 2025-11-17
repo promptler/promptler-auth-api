@@ -1,10 +1,15 @@
 """
 User and device snapshot database models
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, DateTime, ForeignKey, JSON, Index
 from sqlalchemy.orm import relationship
 from app.database import Base
+
+
+def _utc_now():
+    """Return current UTC time without timezone info for database storage"""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class User(Base):
@@ -24,8 +29,8 @@ class User(Base):
     latest_device_profile = Column(JSON, nullable=True)
 
     # Timestamps
-    first_seen_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    last_updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    first_seen_at = Column(DateTime, nullable=False, default=_utc_now)
+    last_updated_at = Column(DateTime, nullable=False, default=_utc_now, onupdate=_utc_now)
 
     # Relationship to device snapshots
     device_snapshots = relationship("DeviceSnapshot", back_populates="user", cascade="all, delete-orphan")
@@ -65,7 +70,7 @@ class DeviceSnapshot(Base):
 
     # When this snapshot was captured
     captured_at = Column(DateTime, nullable=False)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=_utc_now)
 
     # Relationship
     user = relationship("User", back_populates="device_snapshots")

@@ -120,7 +120,7 @@ async def apple_sign_in(
         if sign_in_data.device_profile:
             existing_user.latest_device_profile = _device_profile_to_dict(sign_in_data.device_profile)
 
-        existing_user.last_updated_at = datetime.now(timezone.utc)
+        existing_user.last_updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
         user = existing_user
 
     else:
@@ -133,8 +133,8 @@ async def apple_sign_in(
             display_name=sign_in_data.display_name,
             email=sign_in_data.email,
             latest_device_profile=_device_profile_to_dict(sign_in_data.device_profile),
-            first_seen_at=datetime.now(timezone.utc),
-            last_updated_at=datetime.now(timezone.utc)
+            first_seen_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            last_updated_at=datetime.now(timezone.utc).replace(tzinfo=None)
         )
         db.add(user)
 
@@ -154,8 +154,8 @@ async def apple_sign_in(
             app_version=device_data.app_version,
             app_build=device_data.app_build,
             raw_profile=_device_profile_to_dict(device_data),
-            captured_at=sign_in_data.timestamp,
-            created_at=datetime.now(timezone.utc)
+            captured_at=sign_in_data.timestamp.replace(tzinfo=None) if sign_in_data.timestamp.tzinfo else sign_in_data.timestamp,
+            created_at=datetime.now(timezone.utc).replace(tzinfo=None)
         )
         db.add(snapshot)
         logger.info(f"Created device snapshot for user: {sign_in_data.apple_user_id}")
@@ -223,7 +223,7 @@ async def update_device_metadata(
 
     # Update device profile
     user.latest_device_profile = _device_profile_to_dict(update_data.device_profile)
-    user.last_updated_at = datetime.now(timezone.utc)
+    user.last_updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 
     # Create device snapshot
     device_data = update_data.device_profile
@@ -240,8 +240,8 @@ async def update_device_metadata(
         app_version=device_data.app_version,
         app_build=device_data.app_build,
         raw_profile=_device_profile_to_dict(device_data),
-        captured_at=update_data.timestamp,
-        created_at=datetime.now(timezone.utc)
+        captured_at=update_data.timestamp.replace(tzinfo=None) if update_data.timestamp.tzinfo else update_data.timestamp,
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None)
     )
     db.add(snapshot)
 
