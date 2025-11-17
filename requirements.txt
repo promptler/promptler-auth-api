@@ -1,0 +1,38 @@
+# FastAPI and ASGI server
+fastapi==0.109.2
+uvicorn[standard]==0.27.1
+gunicorn==21.2.0
+python-multipart==0.0.9
+
+# Database
+sqlalchemy==2.0.25
+alembic==1.13.1
+psycopg2-binary==2.9.9  # PostgreSQL adapter
+asyncpg==0.29.0  # Async PostgreSQL support
+
+# Authentication and Security
+pyjwt[crypto]==2.8.0
+cryptography==42.0.2
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# HTTP client for Apple JWKS
+httpx==0.26.0
+aiohttp==3.9.3
+
+# Rate limiting
+slowapi==0.1.9
+
+# Environment and configuration
+python-dotenv==1.0.1
+pydantic-settings==2.1.0
+
+# Validation
+pydantic[email]==2.6.1
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2024.1
+
+# Production
+sentry-sdk[fastapi]==1.40.0  # Optional: Error tracking
