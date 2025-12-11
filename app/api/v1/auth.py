@@ -144,6 +144,7 @@ async def apple_sign_in(
         snapshot = DeviceSnapshot(
             id=str(uuid.uuid4()),
             apple_user_id=sign_in_data.apple_user_id,
+            event_type='sign_in',
             device_model=device_data.model,
             device_name=device_data.name,
             system_name=device_data.system_name,
@@ -158,7 +159,7 @@ async def apple_sign_in(
             created_at=datetime.now(timezone.utc).replace(tzinfo=None)
         )
         db.add(snapshot)
-        logger.info(f"Created device snapshot for user: {sign_in_data.apple_user_id}")
+        logger.info(f"Created sign_in device snapshot for user: {sign_in_data.apple_user_id}")
 
     # Commit transaction
     try:
@@ -230,6 +231,7 @@ async def update_device_metadata(
     snapshot = DeviceSnapshot(
         id=str(uuid.uuid4()),
         apple_user_id=identifier,
+        event_type='app_launch',
         device_model=device_data.model,
         device_name=device_data.name,
         system_name=device_data.system_name,

@@ -54,6 +54,9 @@ class DeviceSnapshot(Base):
     id = Column(String(36), primary_key=True)  # UUID
     apple_user_id = Column(String(255), ForeignKey("users.apple_user_id", ondelete="CASCADE"), nullable=False, index=True)
 
+    # Event type: 'sign_in' or 'app_launch'
+    event_type = Column(String(20), nullable=False, default='sign_in', index=True)
+
     # Device profile details
     device_model = Column(String(100), nullable=True)
     device_name = Column(String(255), nullable=True)
@@ -78,6 +81,7 @@ class DeviceSnapshot(Base):
     # Indexes
     __table_args__ = (
         Index('idx_snapshot_user_captured', 'apple_user_id', 'captured_at'),
+        Index('idx_snapshot_event_type', 'event_type', 'captured_at'),
     )
 
     def __repr__(self):
