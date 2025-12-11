@@ -12,7 +12,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
-from app.api.v1 import auth
+from app.api.v1 import auth, events
 from app.database import async_engine
 
 # Configure logging
@@ -75,7 +75,7 @@ if settings.cors_origins_list:
     )
     logger.info(f"CORS enabled for origins: {settings.cors_origins_list}")
 
-# Add rate limit handler
+# Add rate limit handler (use auth limiter for all endpoints)
 app.state.limiter = auth.limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -123,6 +123,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Include routers
 app.include_router(auth.router, prefix="/v1")
+app.include_router(events.router, prefix="/v1")
 
 
 @app.get("/", tags=["root"])

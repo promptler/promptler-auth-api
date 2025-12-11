@@ -131,3 +131,48 @@ class DeviceUpdateResponse(BaseModel):
                 "last_updated_at": "2024-01-20T15:45:00Z"
             }
         }
+
+
+class OnlineModeEventRequest(BaseModel):
+    """Request body for POST /v1/events/online-mode"""
+    apple_user_id: str = Field(..., description="Apple user identifier", min_length=1)
+    device_profile: Optional[DeviceProfile] = Field(None, description="Device information")
+    timestamp: datetime = Field(..., description="When the online mode was activated")
+
+    @field_validator('apple_user_id')
+    @classmethod
+    def validate_apple_user_id(cls, v: str) -> str:
+        """Ensure apple_user_id is not empty"""
+        if not v or not v.strip():
+            raise ValueError("apple_user_id cannot be empty")
+        return v.strip()
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "apple_user_id": "001234.a1b2c3d4e5f6g7h8.0123",
+                "device_profile": {
+                    "model": "iPhone 14 Pro",
+                    "system_version": "17.2",
+                    "app_version": "1.0.0",
+                    "app_build": "42"
+                },
+                "timestamp": "2024-01-20T15:45:00Z"
+            }
+        }
+
+
+class OnlineModeEventResponse(BaseModel):
+    """Response body for POST /v1/events/online-mode"""
+    apple_user_id: str = Field(..., description="Apple user identifier")
+    event_logged: bool = Field(..., description="Whether the event was successfully logged")
+    logged_at: datetime = Field(..., description="When the event was logged on the server")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "apple_user_id": "001234.a1b2c3d4e5f6g7h8.0123",
+                "event_logged": True,
+                "logged_at": "2024-01-20T15:45:00Z"
+            }
+        }
