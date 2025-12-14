@@ -12,7 +12,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
-from app.api.v1 import auth, events
+from app.api.v1 import auth, events, features
 from app.database import async_engine
 
 # Configure logging
@@ -124,6 +124,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 # Include routers
 app.include_router(auth.router, prefix="/v1")
 app.include_router(events.router, prefix="/v1")
+app.include_router(features.router, prefix="/v1")
 
 
 @app.get("/", tags=["root"])
