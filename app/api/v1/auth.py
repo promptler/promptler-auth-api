@@ -268,6 +268,89 @@ async def update_device_metadata(
     )
 
 
+@router.delete(
+    "/apple/{identifier}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete user data (GDPR Article 17)",
+    description="Delete all server-side data for a user: profile, device snapshots, and anonymize monetization events."
+)
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+async def delete_user_data(
+    request: Request,
+    identifier: str,
+    db: AsyncSession = Depends(get_db_session),
+    api_key: str = Depends(get_current_api_key)
+):
+    """
+    GDPR Right to Erasure (Article 17) — delete all personal data for a user.
+
+    This endpoint:
+    1. Finds the user by Apple user ID
+    2. Deletes device snapshots (cascade from User relationship)
+    3. Nullifies apple_user_id on any monetization_events rows (if table exists)
+    4. Deletes the user record
+    5. Returns confirmation with counts of deleted/anonymized records
+    """
+    logger.info(f"GDPR deletion request for user: {identifier}")
+
+    # Find user
+    result = await db.execute(
+        select(User).where(User.apple_user_id == identifier)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        logger.warning(f"User not found for deletion: {identifier}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User not found: {identifier}"
+        )
+
+    # Count device snapshots that will be cascade-deleted
+    snapshot_result = await db.execute(
+        select(DeviceSnapshot).where(DeviceSnapshot.apple_user_id == identifier)
+    )
+    snapshot_count = len(snapshot_result.scalars().all())
+
+    # Anonymize monetization events (set apple_user_id to NULL, preserving the event data)
+    monetization_count = 0
+    try:
+        from sqlalchemy import text
+        anon_result = await db.execute(
+            text("UPDATE monetization_events SET apple_user_id = NULL WHERE apple_user_id = :uid"),
+            {"uid": identifier}
+        )
+        monetization_count = anon_result.rowcount
+    except Exception:
+        # Table may not exist yet (Task #41E not deployed) — that's fine, skip
+        logger.debug("monetization_events table not found — skipping anonymization")
+
+    # Delete user (cascades to device_snapshots)
+    await db.delete(user)
+
+    try:
+        await db.commit()
+        logger.info(
+            f"GDPR deletion complete for {identifier}: "
+            f"{snapshot_count} snapshots deleted, {monetization_count} events anonymized"
+        )
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Database error during GDPR deletion: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete user data"
+        )
+
+    return {
+        "apple_user_id": identifier,
+        "deleted": True,
+        "snapshots_deleted": snapshot_count,
+        "events_anonymized": monetization_count,
+        "deleted_at": datetime.now(timezone.utc).isoformat()
+    }
+
+
 @router.get(
     "/health",
     status_code=status.HTTP_200_OK,
