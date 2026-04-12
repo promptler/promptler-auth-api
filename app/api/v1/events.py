@@ -15,7 +15,9 @@ from slowapi.util import get_remote_address
 from app.api.deps import get_current_api_key, get_db_session
 from app.core.security import get_rate_limit_key
 from app.models.user import User, DeviceSnapshot
+from app.models.monetization_event import MonetizationEvent
 from app.schemas.auth import OnlineModeEventRequest, OnlineModeEventResponse
+from app.schemas.events import MonetizationEventRequest, MonetizationEventResponse
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -114,6 +116,72 @@ async def log_online_mode_event(
     # Return response
     return OnlineModeEventResponse(
         apple_user_id=event_data.apple_user_id,
+        event_logged=True,
+        logged_at=datetime.now(timezone.utc)
+    )
+
+
+@router.post(
+    "/monetization",
+    response_model=MonetizationEventResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Log monetization event",
+    description="Log a monetization event from the iOS app (purchases, credits, paywall interactions)"
+)
+@limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
+async def log_monetization_event(
+    request: Request,
+    event_data: MonetizationEventRequest,
+    db: AsyncSession = Depends(get_db_session),
+    api_key: str = Depends(get_current_api_key)
+):
+    """
+    Log a monetization event.
+
+    This endpoint:
+    1. Optionally verifies the user exists (warns if not, does not reject)
+    2. Creates a monetization_events record
+    3. Returns confirmation with server-assigned event ID
+
+    Events with null apple_user_id are accepted for anonymous attribution via device_id.
+    """
+    logger.info(f"Monetization event: {event_data.event_name} (user: {event_data.apple_user_id or 'anonymous'})")
+
+    # If apple_user_id provided, verify user exists (warn but don't reject)
+    if event_data.apple_user_id:
+        result = await db.execute(
+            select(User).where(User.apple_user_id == event_data.apple_user_id)
+        )
+        if not result.scalar_one_or_none():
+            logger.warning(f"Monetization event for unknown user: {event_data.apple_user_id}")
+
+    event_id = str(uuid.uuid4())
+    event = MonetizationEvent(
+        id=event_id,
+        apple_user_id=event_data.apple_user_id,
+        device_id=event_data.device_id,
+        event_name=event_data.event_name,
+        parameters=event_data.parameters,
+        app_version=event_data.app_version,
+        app_build=event_data.app_build,
+        captured_at=event_data.captured_at.replace(tzinfo=None) if event_data.captured_at.tzinfo else event_data.captured_at,
+        created_at=datetime.now(timezone.utc).replace(tzinfo=None)
+    )
+    db.add(event)
+
+    try:
+        await db.commit()
+        logger.info(f"Successfully logged monetization event {event_id}: {event_data.event_name}")
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Database error during monetization event logging: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to log event"
+        )
+
+    return MonetizationEventResponse(
+        event_id=event_id,
         event_logged=True,
         logged_at=datetime.now(timezone.utc)
     )
