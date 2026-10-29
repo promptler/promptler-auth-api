@@ -548,7 +548,9 @@ sudo systemctl restart promptler-auth
 ## Security Checklist
 
 - [ ] Strong PostgreSQL password configured
-- [ ] API keys are long, random, and kept secret
+- [ ] `API_KEYS` are long and random. They ship inside the iOS app, so treat them as public: they only stop casual traffic, never protect user data
+- [ ] `ADMIN_API_KEYS` set, kept off every app build, stored only in the server's `.env`
+- [ ] `REQUIRE_IDENTITY_TOKEN=true` (the default)
 - [ ] `.env` file has restricted permissions (600)
 - [ ] SSL/TLS certificates are valid and auto-renewing
 - [ ] Rate limiting is configured
@@ -557,6 +559,52 @@ sudo systemctl restart promptler-auth
 - [ ] Regular backups of database are configured
 - [ ] Security headers are enabled in Nginx
 - [ ] Application runs as non-root user
+
+## Keys and user data (2026-10-28 lockdown)
+
+The iOS app sends one shared Bearer key (`API_KEYS`). Anyone can pull it out of the app, so it
+is not what protects users:
+
+- `POST /v1/auth/apple` needs a valid Apple **identity token** whose `sub` matches
+  `apple_user_id` (signature, audience = bundle ID, issuer and expiry are all checked).
+  Without one: 401. `REQUIRE_IDENTITY_TOKEN=false` turns this off, for local development only.
+- `PATCH` and `DELETE /v1/auth/apple/{id}` need that user's own token in
+  `X-Apple-Identity-Token`, or an **admin key** (`ADMIN_API_KEYS`). The app key alone gets
+  401 before any lookup. The iOS app doesn't call these routes. Use the admin key to handle
+  a deletion request that arrives by email:
+
+  ```bash
+  curl -X DELETE https://api.promptler.online/v1/auth/apple/<apple_user_id> \
+    -H "Authorization: Bearer <admin key>"
+  ```
+- `/v1/events/*` and `/v1/features/*` still accept the app key alone, so anyone can post
+  fake analytics there. Rate limits apply, but treat those tables as unverified.
+
+### Rotating the app key
+
+Both keys are accepted while `API_KEYS` lists both (`old,new`):
+
+1. On the server, generate a new key and an admin key without echoing them anywhere shared:
+   `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`.
+2. Set `API_KEYS=<current>,<new>` and `ADMIN_API_KEYS=<admin>` in `/opt/promptler/.env`,
+   then `sudo systemctl restart promptler-auth`.
+3. Put the new key in the iOS app's `Secrets.swift` (`promptlerAPIKey`) in the next build.
+4. Once few people run older builds, drop the old key from `API_KEYS`. Older builds then only
+   lose these background calls; sign-in in the app keeps working, because it never waits
+   for this API.
+5. If an even older key (one that was committed to promptler_27's git history) is still
+   in `API_KEYS`, remove it now.
+
+### Things to check on the server
+
+- **Real client IP:** the rate limiter keys on `request.client.host`. Behind nginx on the same
+  host, uvicorn trusts `X-Forwarded-For` from 127.0.0.1, so that's the client. **If Cloudflare
+  proxies the domain** (orange cloud), every caller looks like a Cloudflare IP. Then set nginx
+  `real_ip_header CF-Connecting-IP;` with Cloudflare's ranges in `set_real_ip_from`.
+- **Port 8000 closed to the internet:** gunicorn should bind `127.0.0.1:8000` (as the systemd
+  unit above does), not `0.0.0.0`. Otherwise callers can skip nginx.
+- **Per-worker limits:** slowapi keeps counts in memory, one counter per gunicorn worker. With
+  4 workers, a caller effectively gets about 4× `RATE_LIMIT_PER_MINUTE`.
 
 ## Backup Strategy
 

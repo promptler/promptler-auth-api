@@ -1,6 +1,7 @@
 """
 Security utilities for API authentication
 """
+import hmac
 import logging
 from typing import Optional
 from fastapi import HTTPException, Security, status
@@ -41,7 +42,7 @@ async def verify_api_key(
         )
 
     token = credentials.credentials
-    valid_keys = settings.api_keys_list
+    valid_keys = settings.api_keys_list + settings.admin_api_keys_list
 
     if not valid_keys:
         logger.error("No API keys configured in environment")
@@ -50,7 +51,7 @@ async def verify_api_key(
             detail="Server authentication not configured"
         )
 
-    if token not in valid_keys:
+    if not any(hmac.compare_digest(token, key) for key in valid_keys):
         logger.warning(f"Invalid API key attempted: {token[:8]}...")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -60,6 +61,11 @@ async def verify_api_key(
 
     logger.debug("API key validated successfully")
     return token
+
+
+def is_admin_key(api_key: str) -> bool:
+    """True for a server-side admin key (ADMIN_API_KEYS), never for the app's key."""
+    return any(hmac.compare_digest(api_key, key) for key in settings.admin_api_keys_list)
 
 
 def get_rate_limit_key(identifier: str, api_key: str) -> str:

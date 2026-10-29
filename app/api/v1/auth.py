@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, status, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from slowapi import Limiter
@@ -14,7 +14,7 @@ from slowapi.util import get_remote_address
 
 from app.api.deps import get_current_api_key, get_db_session
 from app.core.apple_auth import apple_verifier
-from app.core.security import get_rate_limit_key
+from app.core.security import get_rate_limit_key, is_admin_key
 from app.models.user import User, DeviceSnapshot
 from app.schemas.auth import (
     AppleSignInRequest,
@@ -30,6 +30,38 @@ logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
+
+
+def _authorize_user_change(identifier: str, api_key: str, identity_token: Optional[str]) -> None:
+    """
+    Editing or deleting a user needs that user's own Apple identity token
+    (X-Apple-Identity-Token), or a server-side admin key. The app's shared key
+    ships inside the binary, so on its own it must not reach anyone's data.
+    Runs before any lookup, so the routes can't be used to probe which users exist.
+    """
+    if is_admin_key(api_key):
+        return
+    if not identity_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Identity token required"
+        )
+    try:
+        token_user_id = apple_verifier.verify_and_extract_user_id(identity_token)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Token verification failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Failed to verify identity token"
+        )
+    if token_user_id != identifier:
+        logger.warning("Identity token does not match the user being changed")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Identity token does not belong to this user"
+        )
 
 
 def _device_profile_to_dict(device_profile) -> Optional[dict]:
@@ -57,7 +89,7 @@ async def apple_sign_in(
     Handle Apple Sign-In authentication
 
     This endpoint:
-    1. Verifies the Apple identity token (if provided)
+    1. Verifies the Apple identity token (required unless REQUIRE_IDENTITY_TOKEN is off)
     2. Creates or updates the user profile
     3. Logs device snapshot
     4. Returns the stored user data
@@ -90,13 +122,18 @@ async def apple_sign_in(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Failed to verify identity token"
             )
+    elif settings.REQUIRE_IDENTITY_TOKEN:
+        # Without a token, anyone holding the app key could create or overwrite any profile.
+        logger.warning(f"Rejected Apple Sign-In without identity token for user {sign_in_data.apple_user_id}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Identity token required"
+        )
     else:
         logger.warning(
-            f"No identity token provided for user {sign_in_data.apple_user_id}. "
-            "This should only happen in development/testing!"
+            f"No identity token provided for user {sign_in_data.apple_user_id} "
+            "(REQUIRE_IDENTITY_TOKEN is off; development only)"
         )
-        # In production, you might want to reject requests without tokens:
-        # raise HTTPException(status_code=400, detail="Identity token required")
 
     # Check if user exists
     result = await db.execute(
@@ -198,7 +235,8 @@ async def update_device_metadata(
     identifier: str,
     update_data: DeviceUpdateRequest,
     db: AsyncSession = Depends(get_db_session),
-    api_key: str = Depends(get_current_api_key)
+    api_key: str = Depends(get_current_api_key),
+    x_apple_identity_token: Optional[str] = Header(None)
 ):
     """
     Update device and app metadata for an existing user
@@ -208,6 +246,7 @@ async def update_device_metadata(
     app needs to refresh local metadata (e.g., after an app update).
     """
     logger.info(f"Device update request for user: {identifier}")
+    _authorize_user_change(identifier, api_key, x_apple_identity_token)
 
     # Find user
     result = await db.execute(
@@ -279,7 +318,8 @@ async def delete_user_data(
     request: Request,
     identifier: str,
     db: AsyncSession = Depends(get_db_session),
-    api_key: str = Depends(get_current_api_key)
+    api_key: str = Depends(get_current_api_key),
+    x_apple_identity_token: Optional[str] = Header(None)
 ):
     """
     GDPR Right to Erasure (Article 17) — delete all personal data for a user.
@@ -292,6 +332,7 @@ async def delete_user_data(
     5. Returns confirmation with counts of deleted/anonymized records
     """
     logger.info(f"GDPR deletion request for user: {identifier}")
+    _authorize_user_change(identifier, api_key, x_apple_identity_token)
 
     # Find user
     result = await db.execute(
