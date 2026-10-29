@@ -10,11 +10,10 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from app.api.deps import get_current_api_key, get_db_session
 from app.core.apple_auth import apple_verifier
-from app.core.security import get_rate_limit_key, is_admin_key
+from app.core.security import get_rate_limit_key, is_admin_key, client_ip
 from app.models.user import User, DeviceSnapshot
 from app.schemas.auth import (
     AppleSignInRequest,
@@ -27,7 +26,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # Initialize rate limiter
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=client_ip)
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 

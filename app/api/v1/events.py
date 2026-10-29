@@ -10,10 +10,9 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from app.api.deps import get_current_api_key, get_db_session
-from app.core.security import get_rate_limit_key
+from app.core.security import get_rate_limit_key, client_ip
 from app.models.user import User, DeviceSnapshot
 from app.models.monetization_event import MonetizationEvent
 from app.models.issue_report import IssueReport
@@ -25,7 +24,7 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 
 # Initialize rate limiter
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=client_ip)
 
 router = APIRouter(prefix="/events", tags=["events"])
 

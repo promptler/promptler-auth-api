@@ -4,7 +4,7 @@ Security utilities for API authentication
 import hmac
 import logging
 from typing import Optional
-from fastapi import HTTPException, Security, status
+from fastapi import HTTPException, Request, Security, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.config import settings
@@ -66,6 +66,19 @@ async def verify_api_key(
 def is_admin_key(api_key: str) -> bool:
     """True for a server-side admin key (ADMIN_API_KEYS), never for the app's key."""
     return any(hmac.compare_digest(api_key, key) for key in settings.admin_api_keys_list)
+
+
+def client_ip(request: Request) -> str:
+    """
+    The caller's IP for rate limiting. Behind the Cloudflare Tunnel every request reaches
+    the app from the proxy, so the socket address is the same for all users and they would
+    share one bucket; Cloudflare's CF-Connecting-IP carries the real visitor IP.
+    """
+    if settings.TRUST_CF_CONNECTING_IP:
+        cf_ip = request.headers.get("cf-connecting-ip", "").strip()
+        if cf_ip:
+            return cf_ip
+    return request.client.host if request.client else "unknown"
 
 
 def get_rate_limit_key(identifier: str, api_key: str) -> str:

@@ -601,10 +601,13 @@ Both keys are accepted while `API_KEYS` lists both (`old,new`):
 
 ### Things to check on the server
 
-- **Real client IP:** the rate limiter keys on `request.client.host`. Behind nginx on the same
-  host, uvicorn trusts `X-Forwarded-For` from 127.0.0.1, so that's the client. **If Cloudflare
-  proxies the domain** (orange cloud), every caller looks like a Cloudflare IP. Then set nginx
-  `real_ip_header CF-Connecting-IP;` with Cloudflare's ranges in `set_real_ip_from`.
+- **Real client IP:** the rate limiter counts callers by Cloudflare's `CF-Connecting-IP`
+  header (`TRUST_CF_CONNECTING_IP=true`, the default), because behind the Cloudflare Tunnel
+  every request reaches the app from the proxy. That header can be forged by anyone who
+  reaches the origin directly, so it is only safe while the VPS ports stay closed to the
+  internet (checked 2026-10-29: 80, 443, 3000, 8000 and the Swarm ports are unreachable
+  over IPv4 and IPv6). If the app is ever served without Cloudflare in front, set
+  `TRUST_CF_CONNECTING_IP=false`.
 - **Port 8000 closed to the internet:** gunicorn should bind `127.0.0.1:8000` (as the systemd
   unit above does), not `0.0.0.0`. Otherwise callers can skip nginx.
 - **Per-worker limits:** slowapi keeps counts in memory, one counter per gunicorn worker. With

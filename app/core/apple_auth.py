@@ -120,21 +120,21 @@ class AppleTokenVerifier:
             logger.error(f"Apple token verification failed: Invalid audience (expected: {settings.APPLE_BUNDLE_ID})")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Identity token audience mismatch (expected bundle ID: {settings.APPLE_BUNDLE_ID})"
+                detail="Invalid identity token"
             )
 
         except InvalidIssuerError:
             logger.error("Apple token verification failed: Invalid issuer")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Identity token issuer is not Apple"
+                detail="Invalid identity token"
             )
 
         except InvalidTokenError as e:
             logger.error(f"Apple token verification failed: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Invalid identity token: {str(e)}"
+                detail="Invalid identity token"
             )
 
         except Exception as e:
