@@ -577,8 +577,12 @@ is not what protects users:
   curl -X DELETE https://api.promptler.online/v1/auth/apple/<apple_user_id> \
     -H "Authorization: Bearer <admin key>"
   ```
-- `/v1/events/*` and `/v1/features/*` still accept the app key alone, so anyone can post
-  fake analytics there. Rate limits apply, but treat those tables as unverified.
+- **Every route** also checks the caller's Firebase App Check token (`X-Firebase-AppCheck`,
+  sent by iOS 2.1.0 build 85+). Firebase mints it only for a genuine install that passed App
+  Attest, so a copied API key alone stops working once `ENFORCE_APP_CHECK=true`. Until then,
+  missing or invalid tokens are only logged (`Request without App Check token` /
+  `App Check token rejected`). Admin keys skip it. Turn enforcement on once those warnings
+  are rare. Older builds then lose these background calls, but sign-in in the app keeps working.
 
 ### Rotating the app key
 

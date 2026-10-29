@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     # anyone holding the app key could create or overwrite any user's profile.
     REQUIRE_IDENTITY_TOKEN: bool = True
 
+    # Firebase App Check (see app/core/app_check.py). Empty project number = not checked.
+    APP_CHECK_PROJECT_NUMBER: str = ""
+    APP_CHECK_APP_IDS: str = ""  # Comma-separated Firebase app IDs allowed; empty = any app in the project
+    ENFORCE_APP_CHECK: bool = False  # False = log missing/invalid tokens only
+
     # Apple Sign-In
     APPLE_BUNDLE_ID: str
     APPLE_TEAM_ID: str
@@ -53,6 +58,11 @@ class Settings(BaseSettings):
     def api_keys_list(self) -> List[str]:
         """Parse comma-separated API keys"""
         return [key.strip() for key in self.API_KEYS.split(",") if key.strip()]
+
+    @property
+    def app_check_app_ids_list(self) -> List[str]:
+        """Parse comma-separated Firebase app IDs"""
+        return [app_id.strip() for app_id in self.APP_CHECK_APP_IDS.split(",") if app_id.strip()]
 
     @property
     def admin_api_keys_list(self) -> List[str]:
