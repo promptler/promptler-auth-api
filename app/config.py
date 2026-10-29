@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     APPLE_JWKS_CACHE_TTL: int = 3600
 
     # Rate Limiting
+    # Count callers by Cloudflare's CF-Connecting-IP header. Only safe while the origin is
+    # reachable solely through Cloudflare (here: the Cloudflare Tunnel; the VPS ports are
+    # closed to the internet), because anyone hitting the origin directly could forge it.
+    TRUST_CF_CONNECTING_IP: bool = True
     RATE_LIMIT_PER_MINUTE: int = 10
     RATE_LIMIT_PER_HOUR: int = 100
 
