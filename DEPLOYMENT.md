@@ -583,9 +583,9 @@ is not what protects users:
   one-time authorization code from a fresh Sign in with Apple prompt in
   `X-Apple-Authorization-Code`. The server swaps it for the user's refresh token and revokes
   it, which removes Promptler from the user's Apple ID › Sign in with Apple list. It needs a
-  Sign in with Apple key: Apple Developer › Certificates, IDs & Profiles › Keys › +, tick
-  Sign in with Apple, configure it with the app's primary App ID, download the `.p8` (only
-  once). Set `APPLE_SIWA_KEY_ID=<Key ID>` and
+  Sign in with Apple key for the app's primary App ID. Apple allows two per App ID and
+  `com.promptler.ios.PromptlerV27` already has both, so reuse key `95BN…` ("promptler api sign
+  in with apple", shared with promptler-api, which uses the same two variables). Set `APPLE_SIWA_KEY_ID=<Key ID>` and
   `APPLE_SIWA_PRIVATE_KEY_B64=$(base64 -i AuthKey_<Key ID>.p8 | tr -d '\n')`. `APPLE_TEAM_ID`
   and `APPLE_BUNDLE_ID` must be the real team and bundle ID. Without the key, deletion still
   works and the log says `Apple token revocation skipped`. The response's `apple_revoked`
