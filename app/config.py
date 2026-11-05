@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     APPLE_TEAM_ID: str
     APPLE_JWKS_URL: str = "https://appleid.apple.com/auth/keys"
     APPLE_JWKS_CACHE_TTL: int = 3600
+    # Sign in with Apple key (Apple Developer > Keys), used to revoke a user's Apple tokens
+    # when they delete their account. Empty = deletion still works, revocation is skipped.
+    APPLE_SIWA_KEY_ID: str = ""
+    APPLE_SIWA_PRIVATE_KEY_B64: str = ""  # the .p8 file, base64-encoded on one line
 
     # Rate Limiting
     # Count callers by Cloudflare's CF-Connecting-IP header. Only safe while the origin is

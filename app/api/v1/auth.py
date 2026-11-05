@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from slowapi import Limiter
 
 from app.api.deps import get_current_api_key, get_db_session
+from app.core import apple_revoke
 from app.core.apple_auth import apple_verifier
 from app.core.security import get_rate_limit_key, is_admin_key, client_ip
 from app.models.user import User, DeviceSnapshot
@@ -318,12 +319,15 @@ async def delete_user_data(
     identifier: str,
     db: AsyncSession = Depends(get_db_session),
     api_key: str = Depends(get_current_api_key),
-    x_apple_identity_token: Optional[str] = Header(None)
+    x_apple_identity_token: Optional[str] = Header(None),
+    x_apple_authorization_code: Optional[str] = Header(None)
 ):
     """
     GDPR Right to Erasure (Article 17) — delete all personal data for a user.
 
     This endpoint:
+    0. Revokes the user's Sign in with Apple tokens when the app sends the one-time
+       authorization code (X-Apple-Authorization-Code). Best effort: never blocks deletion.
     1. Finds the user by Apple user ID
     2. Deletes device snapshots (cascade from User relationship)
     3. Nullifies apple_user_id on any monetization_events rows (if table exists)
@@ -333,6 +337,12 @@ async def delete_user_data(
     logger.info(f"GDPR deletion request for user: {identifier}")
     _authorize_user_change(identifier, api_key, x_apple_identity_token)
 
+    # Revoke even when no profile exists (the sign-in may never have reached us):
+    # the Apple link is still there.
+    apple_revoked = False
+    if x_apple_authorization_code:
+        apple_revoked = await apple_revoke.revoke_with_authorization_code(x_apple_authorization_code)
+
     # Find user
     result = await db.execute(
         select(User).where(User.apple_user_id == identifier)
@@ -340,7 +350,7 @@ async def delete_user_data(
     user = result.scalar_one_or_none()
 
     if not user:
-        logger.warning(f"User not found for deletion: {identifier}")
+        logger.warning(f"User not found for deletion: {identifier} (apple_revoked={apple_revoked})")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User not found: {identifier}"
@@ -387,6 +397,7 @@ async def delete_user_data(
         "deleted": True,
         "snapshots_deleted": snapshot_count,
         "events_anonymized": monetization_count,
+        "apple_revoked": apple_revoked,
         "deleted_at": datetime.now(timezone.utc).isoformat()
     }
 
