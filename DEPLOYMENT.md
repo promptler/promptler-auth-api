@@ -551,6 +551,7 @@ sudo systemctl restart promptler-auth
 - [ ] `API_KEYS` are long and random. They ship inside the iOS app, so treat them as public: they only stop casual traffic, never protect user data
 - [ ] `ADMIN_API_KEYS` set, kept off every app build, stored only in the server's `.env`
 - [ ] `REQUIRE_IDENTITY_TOKEN=true` (the default)
+- [ ] `APPLE_SIWA_KEY_ID` and `APPLE_SIWA_PRIVATE_KEY_B64` set, so account deletion revokes Sign in with Apple
 - [ ] `.env` file has restricted permissions (600)
 - [ ] SSL/TLS certificates are valid and auto-renewing
 - [ ] Rate limiting is configured
@@ -570,13 +571,25 @@ is not what protects users:
   Without one: 401. `REQUIRE_IDENTITY_TOKEN=false` turns this off, for local development only.
 - `PATCH` and `DELETE /v1/auth/apple/{id}` need that user's own token in
   `X-Apple-Identity-Token`, or an **admin key** (`ADMIN_API_KEYS`). The app key alone gets
-  401 before any lookup. The iOS app doesn't call these routes. Use the admin key to handle
-  a deletion request that arrives by email:
+  401 before any lookup. The iOS app calls `DELETE` from Settings › Account › Delete Account
+  (2.1.0+); it doesn't call `PATCH`. Use the admin key to handle a deletion request that
+  arrives by email:
 
   ```bash
   curl -X DELETE https://api.promptler.online/v1/auth/apple/<apple_user_id> \
     -H "Authorization: Bearer <admin key>"
   ```
+- **Revoking Sign in with Apple on deletion** (App Review 5.1.1(v)): the app sends the
+  one-time authorization code from a fresh Sign in with Apple prompt in
+  `X-Apple-Authorization-Code`. The server swaps it for the user's refresh token and revokes
+  it, which removes Promptler from the user's Apple ID › Sign in with Apple list. It needs a
+  Sign in with Apple key for the app's primary App ID. Apple allows two per App ID and
+  `com.promptler.ios.PromptlerV27` already has both, so reuse key `95BN…` ("promptler api sign
+  in with apple", shared with promptler-api, which uses the same two variables). Set `APPLE_SIWA_KEY_ID=<Key ID>` and
+  `APPLE_SIWA_PRIVATE_KEY_B64=$(base64 -i AuthKey_<Key ID>.p8 | tr -d '\n')`. `APPLE_TEAM_ID`
+  and `APPLE_BUNDLE_ID` must be the real team and bundle ID. Without the key, deletion still
+  works and the log says `Apple token revocation skipped`. The response's `apple_revoked`
+  says whether Apple confirmed it; a revocation failure never blocks the deletion.
 - **Every route** also checks the caller's Firebase App Check token (`X-Firebase-AppCheck`,
   sent by iOS 2.1.0 build 85+). Firebase mints it only for a genuine install that passed App
   Attest, so a copied API key alone stops working once `ENFORCE_APP_CHECK=true`. Until then,
